@@ -1,0 +1,9 @@
+services:
+  server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      CLIENT_URL: http://localhost:5173
+    restart: unless-stopped

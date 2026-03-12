@@ -1,0 +1,24 @@
+{
+  "name": "skullking-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "dev:tunnel": "node scripts/tunnel.mjs",
+    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:tunnel\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "simulate": "tsx src/dev/simulate.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}

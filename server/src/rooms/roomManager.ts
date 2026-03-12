@@ -1,0 +1,204 @@
+import type { GameState } from '../game/stateMachine.js';
+import {
+  applyAction,
+  advanceToNextRound,
+  createInitialState,
+  type GameAction,
+} from '../game/stateMachine.js';
+import { makePublicState, getPrivateView } from '../game/view.js';
+import type { Server } from 'socket.io';
+
+const DISCONNECT_GRACE_MS = 60_000;
+
+export interface Room {
+  roomCode: string;
+  state: GameState;
+  playerToSocket: Map<string, string>;
+  socketToPlayer: Map<string, string>;
+  disconnectTimers: Map<string, NodeJS.Timeout>;
+  lock: Promise<void>;
+  lockResolve: (() => void) | null;
+}
+
+const rooms = new Map<string, Room>();
+
+function generateRoomCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return rooms.has(code) ? generateRoomCode() : code;
+}
+
+function acquireLock(room: Room): Promise<() => void> {
+  const prev = room.lock;
+  let resolve: () => void;
+  room.lock = new Promise((r) => { resolve = r; });
+  room.lockResolve = resolve!;
+  return prev.then(() => () => {
+    room.lockResolve?.();
+  });
+}
+
+export async function withRoomLock<T>(roomCode: string, fn: (room: Room) => Promise<T>): Promise<T | null> {
+  const room = rooms.get(roomCode);
+  if (!room) return null;
+  const release = await acquireLock(room);
+  try {
+    return await fn(room);
+  } finally {
+    release();
+  }
+}
+
+export function createRoom(nickname: string, playerId: string, socketId: string): { roomCode: string; state: GameState } {
+  const roomCode = generateRoomCode();
+  const state = createInitialState();
+  const result = applyAction(state, { type: 'room:create', nickname }, playerId);
+  if (!result.success || !result.state) throw new Error(result.error ?? 'CREATE_FAILED');
+
+  const room: Room = {
+    roomCode,
+    state: result.state,
+    playerToSocket: new Map([[playerId, socketId]]),
+    socketToPlayer: new Map([[socketId, playerId]]),
+    disconnectTimers: new Map(),
+    lock: Promise.resolve(),
+    lockResolve: null,
+  };
+  rooms.set(roomCode, room);
+  return { roomCode, state: result.state };
+}
+
+export async function joinRoom(
+  roomCode: string,
+  nickname: string,
+  playerId: string,
+  socketId: string
+): Promise<{ success: boolean; error?: string; state?: GameState }> {
+  const result = await withRoomLock(roomCode, async (room) => {
+    const r = applyAction(room.state, { type: 'room:join', roomCode, nickname, playerId }, playerId);
+    if (!r.success) return { success: false, error: r.error };
+    room.state = r.state!;
+    const oldSocketId = room.playerToSocket.get(playerId);
+    if (oldSocketId) room.socketToPlayer.delete(oldSocketId);
+    room.playerToSocket.set(playerId, socketId);
+    room.socketToPlayer.set(socketId, playerId);
+    room.disconnectTimers.get(playerId) && clearTimeout(room.disconnectTimers.get(playerId)!);
+    room.disconnectTimers.delete(playerId);
+    return { success: true, state: room.state };
+  });
+  return result ?? { success: false, error: 'ROOM_NOT_FOUND' };
+}
+
+export async function leaveRoom(roomCode: string, playerId: string): Promise<{ success: boolean; state?: GameState }> {
+  const result = await withRoomLock(roomCode, async (room) => {
+    const r = applyAction(room.state, { type: 'room:leave', roomCode, playerId }, playerId);
+    if (!r.success) return { success: false };
+    room.state = r.state!;
+    const socketId = room.playerToSocket.get(playerId);
+    if (socketId) {
+      room.playerToSocket.delete(playerId);
+      room.socketToPlayer.delete(socketId);
+    }
+    room.disconnectTimers.get(playerId) && clearTimeout(room.disconnectTimers.get(playerId)!);
+    room.disconnectTimers.delete(playerId);
+    return { success: true, state: room.state };
+  });
+  return result ?? { success: false };
+}
+
+export function scheduleDisconnectLeave(roomCode: string, playerId: string, io: Server): void {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  room.disconnectTimers.get(playerId) && clearTimeout(room.disconnectTimers.get(playerId)!);
+  const timer = setTimeout(() => {
+    leaveRoom(roomCode, playerId).then((r) => {
+      if (r.success && r.state) {
+        broadcastRoomUpdate(roomCode, r.state, io);
+      }
+      room.disconnectTimers.delete(playerId);
+    });
+  }, DISCONNECT_GRACE_MS);
+  room.disconnectTimers.set(playerId, timer);
+}
+
+export function cancelDisconnectTimer(roomCode: string, playerId: string): void {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  const t = room.disconnectTimers.get(playerId);
+  if (t) {
+    clearTimeout(t);
+    room.disconnectTimers.delete(playerId);
+  }
+}
+
+export async function reconnectPlayer(
+  roomCode: string,
+  playerId: string,
+  socketId: string
+): Promise<{ success: boolean; state?: GameState }> {
+  const result = await withRoomLock(roomCode, async (room) => {
+    const r = applyAction(room.state, { type: 'player:reconnect', roomCode, playerId }, playerId);
+    if (!r.success) return { success: false };
+    const oldSocketId = room.playerToSocket.get(playerId);
+    if (oldSocketId) room.socketToPlayer.delete(oldSocketId);
+    room.playerToSocket.set(playerId, socketId);
+    room.socketToPlayer.set(socketId, playerId);
+    cancelDisconnectTimer(roomCode, playerId);
+    return { success: true, state: room.state };
+  });
+  return result ?? { success: false };
+}
+
+export async function dispatchAction(
+  roomCode: string,
+  action: GameAction,
+  actorId: string,
+  io: Server
+): Promise<{ success: boolean; error?: string }> {
+  const result = await withRoomLock(roomCode, async (room) => {
+    const r = applyAction(room.state, action, actorId);
+    if (!r.success) return { success: false, error: r.error };
+    room.state = r.state!;
+
+    if (room.state.phase === 'roundEnd') {
+      for (const [, socketId] of room.playerToSocket) {
+        io.to(socketId).emit('game:roundResult', { roundSummary: room.state.roundScores });
+      }
+      room.state = advanceToNextRound(room.state);
+      for (const [, socketId] of room.playerToSocket) {
+        io.to(socketId).emit('game:phaseChange', {
+          phase: room.state.phase,
+          roundNumber: room.state.roundNumber,
+        });
+      }
+    }
+    if (room.state.phase === 'gameOver') {
+      for (const [, socketId] of room.playerToSocket) {
+        io.to(socketId).emit('game:gameOver', { finalScores: room.state.totalScores });
+      }
+    }
+
+    broadcastRoomUpdate(roomCode, room.state, io);
+    return { success: true };
+  });
+  return result ?? { success: false, error: 'ROOM_NOT_FOUND' };
+}
+
+export function broadcastRoomUpdate(roomCode: string, state: GameState, io: Server): void {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  const publicState = { ...makePublicState(state), roomCode };
+  for (const [playerId, socketId] of room.playerToSocket) {
+    io.to(socketId).emit('room:update', publicState);
+    io.to(socketId).emit('hand:update', getPrivateView(state, playerId));
+  }
+}
+
+export function getRoom(roomCode: string): Room | undefined {
+  return rooms.get(roomCode);
+}
+
+export function getPlayerIdBySocket(roomCode: string, socketId: string): string | undefined {
+  return rooms.get(roomCode)?.socketToPlayer.get(socketId);
+}

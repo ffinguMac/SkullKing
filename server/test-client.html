@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Skull King Test Client</title>
+</head>
+<body>
+  <h1>Skull King Socket Test</h1>
+  <div>
+    <button id="create">방 생성</button>
+    <input id="nickname" placeholder="닉네임" value="Player1">
+  </div>
+  <div>
+    <input id="roomCode" placeholder="방 코드">
+    <button id="join">참가</button>
+  </div>
+  <div>
+    <button id="ready">레디</button>
+    <button id="start">시작</button>
+  </div>
+  <div>
+    <input id="bet" type="number" placeholder="베팅" min="0">
+    <button id="betBtn">베팅</button>
+  </div>
+  <div>
+    <input id="cardIndex" type="number" placeholder="카드 인덱스" min="0">
+    <select id="tigressChoice"><option value="">-</option><option value="pirate">해적</option><option value="escape">탈출</option></select>
+    <button id="playCard">카드 내기</button>
+  </div>
+  <pre id="log"></pre>
+  <script src="https://cdn.socket.io/4.7.0/socket.io.min.js"></script>
+  <script>
+    const socket = io('http://localhost:3000');
+    let roomCode = '';
+    let playerId = '';
+
+    const log = (msg) => {
+      document.getElementById('log').textContent += msg + '\n';
+    };
+
+    socket.on('connect', () => log('Connected: ' + socket.id));
+    socket.on('room:update', (s) => { if (s.roomCode) roomCode = s.roomCode; log('room:update: phase=' + (s.phase||'') + ' room=' + roomCode); });
+    socket.on('hand:update', (h) => { if (h.playerId) playerId = h.playerId; log('hand:update: ' + (h.hand?.length ?? 0) + ' cards'); });
+    socket.on('game:error', (e) => log('ERROR: ' + e.code + ' - ' + e.message));
+    socket.on('game:toast', (t) => log('Toast: ' + t.message));
+    socket.on('game:phaseChange', (p) => log('phaseChange: ' + p.phase + ' round ' + p.roundNumber));
+    socket.on('game:roundResult', (r) => log('roundResult: ' + JSON.stringify(r.roundSummary)));
+    socket.on('game:gameOver', (g) => log('gameOver: ' + JSON.stringify(g.finalScores)));
+
+    document.getElementById('create').onclick = () => {
+      socket.emit('room:create', { nickname: document.getElementById('nickname').value });
+    };
+    document.getElementById('join').onclick = () => {
+      roomCode = document.getElementById('roomCode').value.toUpperCase();
+      socket.emit('room:join', { roomCode, nickname: document.getElementById('nickname').value, playerId });
+    };
+    document.getElementById('ready').onclick = () => {
+      socket.emit('room:ready', { roomCode, playerId: playerId || socket.id });
+    };
+    document.getElementById('start').onclick = () => {
+      socket.emit('game:start', { roomCode, playerId: playerId || socket.id });
+    };
+    document.getElementById('betBtn').onclick = () => {
+      socket.emit('game:bet', { roomCode, playerId: playerId || socket.id, value: parseInt(document.getElementById('bet').value) || 0 });
+    };
+    document.getElementById('playCard').onclick = () => {
+      const tigress = document.getElementById('tigressChoice').value;
+      socket.emit('game:playCard', {
+        roomCode,
+        playerId: playerId || socket.id,
+        cardId: parseInt(document.getElementById('cardIndex').value) || 0,
+        tigressChoice: tigress || undefined
+      });
+    };
+
+  </script>
+</body>
+</html>

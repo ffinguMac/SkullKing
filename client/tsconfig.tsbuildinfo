@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/socket.ts","./src/storage.ts","./src/types.ts","./src/vite-env.d.ts","./src/components/hand.tsx","./src/components/scoreboard.tsx","./src/components/trickarea.tsx","./src/hooks/usegamestate.ts","./src/pages/game.tsx","./src/pages/home.tsx","./src/pages/lobby.tsx"],"version":"5.9.3"}
