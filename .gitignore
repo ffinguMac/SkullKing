@@ -4,3 +4,10 @@
 **/*.spec.ts
 **/*.test.js
 **/*.spec.js
+
+# Ignore local environment files (keep examples tracked)
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+!**/.env.example
