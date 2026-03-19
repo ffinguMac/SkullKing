@@ -5,7 +5,7 @@ import { getCardLabel, getSuitShortLabel } from '../utils/cardLabels';
 
 interface CardDisplayProps {
   card: Card;
-  size?: 'small' | 'normal';
+  size?: 'small' | 'normal' | 'large';
   style?: React.CSSProperties;
 }
 
@@ -14,7 +14,12 @@ export default function CardDisplay({ card, size = 'normal', style: extraStyle }
   const [imgError, setImgError] = useState(false);
   const imgPath = getCardImagePath(card);
 
-  const sizeStyle = size === 'small' ? { width: 60, height: 85 } : { width: 70, height: 100 };
+  const sizeStyle =
+    size === 'small'
+      ? { width: 60, height: 85 }
+      : size === 'large'
+        ? { width: 92, height: 132 }
+        : { width: 70, height: 100 };
 
   const baseStyle: React.CSSProperties = {
     ...sizeStyle,

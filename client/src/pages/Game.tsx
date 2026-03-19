@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSocket } from '../socket';
 import { loadSession, clearSession } from '../storage';
@@ -11,6 +11,8 @@ export default function Game() {
   const navigate = useNavigate();
   const { publicState, privateView, error, toast, roundResult, clearError, clearRoundResult } = useGameState();
   const session = loadSession();
+  const [trickNotice, setTrickNotice] = useState<string | null>(null);
+  const prevTrickCountRef = useRef(0);
 
   useEffect(() => {
     if (!session?.roomCode) {
@@ -47,6 +49,33 @@ export default function Game() {
 
   const isMyTurn = publicState.currentTurnPlayerId === session.playerId;
   const playerId = session.playerId;
+  const activePlayers = publicState.players.filter((p) => !p.isSpectator).slice(0, 6);
+  const leadPlayerId = publicState.turnOrder[0] ?? null;
+  const leadPlayerName = leadPlayerId
+    ? publicState.players.find((p) => p.playerId === leadPlayerId)?.nickname ?? leadPlayerId.slice(0, 8)
+    : '-';
+  const currentTurnName = publicState.currentTurnPlayerId
+    ? publicState.players.find((p) => p.playerId === publicState.currentTurnPlayerId)?.nickname ??
+      publicState.currentTurnPlayerId.slice(0, 8)
+    : '-';
+
+  useEffect(() => {
+    const trickCount = publicState.tricks.length;
+    if (trickCount > prevTrickCountRef.current) {
+      const lastTrick = publicState.tricks[trickCount - 1];
+      const winnerId =
+        lastTrick?.result.winnerId ?? lastTrick?.result.wouldHaveWonId ?? lastTrick?.result.whalePlayerId ?? null;
+      const winnerName = winnerId
+        ? publicState.players.find((p) => p.playerId === winnerId)?.nickname ?? winnerId.slice(0, 8)
+        : null;
+
+      setTrickNotice(winnerName ? `🃏 트릭 승리: ${winnerName}` : '🌀 이번 트릭은 VOID');
+      const timer = setTimeout(() => setTrickNotice(null), 1800);
+      prevTrickCountRef.current = trickCount;
+      return () => clearTimeout(timer);
+    }
+    prevTrickCountRef.current = trickCount;
+  }, [publicState.tricks, publicState.players]);
 
   const phaseLabel =
     publicState.phase === 'betting'
@@ -56,7 +85,7 @@ export default function Game() {
         : publicState.phase;
 
   return (
-    <div style={{ padding: '1rem', maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ padding: '1rem', maxWidth: 1080, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1 style={{ margin: 0 }}>스컬킹 - Round {publicState.roundNumber}</h1>
         <span
@@ -71,6 +100,37 @@ export default function Game() {
           {isMyTurn && <strong style={{ marginLeft: '0.5rem', color: '#9f9' }}>• 내 턴</strong>}
         </span>
       </div>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.6rem',
+          flexWrap: 'wrap',
+          marginBottom: '0.9rem',
+        }}
+      >
+        <div
+          style={{
+            padding: '0.45rem 0.7rem',
+            borderRadius: 999,
+            background: 'rgba(36, 66, 36, 0.85)',
+            border: '1px solid #5c8f5c',
+            fontSize: '0.86rem',
+          }}
+        >
+          🎯 선 플레이어: <strong style={{ color: '#b8e7b8' }}>{leadPlayerName}</strong>
+        </div>
+        <div
+          style={{
+            padding: '0.45rem 0.7rem',
+            borderRadius: 999,
+            background: 'rgba(30, 40, 66, 0.85)',
+            border: '1px solid #5f7cb2',
+            fontSize: '0.86rem',
+          }}
+        >
+          ⏱ 현재 진행: <strong style={{ color: '#c7d6ff' }}>{currentTurnName}</strong>
+        </div>
+      </div>
       {error && (
         <div style={{ padding: '0.5rem', background: '#5a2020', borderRadius: 6, marginBottom: '1rem' }}>
           {error}
@@ -80,6 +140,24 @@ export default function Game() {
       {toast && (
         <div style={{ padding: '0.5rem', background: '#2a4a2a', borderRadius: 6, marginBottom: '1rem' }}>
           {toast}
+        </div>
+      )}
+      {trickNotice && (
+        <div
+          className="trick-notice"
+          style={{
+            padding: '0.65rem 0.9rem',
+            background: 'linear-gradient(90deg, rgba(24,68,42,0.95), rgba(38,92,56,0.95), rgba(24,68,42,0.95))',
+            border: '1px solid #9ad69a',
+            borderRadius: 8,
+            marginBottom: '0.9rem',
+            fontWeight: 700,
+            letterSpacing: '0.01em',
+            textAlign: 'center',
+            boxShadow: '0 8px 18px rgba(0,0,0,0.28)',
+          }}
+        >
+          {trickNotice}
         </div>
       )}
 
@@ -94,6 +172,7 @@ export default function Game() {
       {publicState.phase === 'betting' && isMyTurn && (
         <BetInput
           max={publicState.tricksPerRound}
+          min={0}
           label={`Bet (0–${publicState.tricksPerRound} tricks)`}
           onSubmit={(v) => {
             getSocket().emit('game:bet', {
@@ -105,7 +184,95 @@ export default function Game() {
         />
       )}
 
-      <TrickArea plays={publicState.currentTrickPlays} players={publicState.players} />
+      <div
+        style={{
+          position: 'relative',
+          height: 420,
+          marginBottom: '1rem',
+          borderRadius: 16,
+          background: 'radial-gradient(circle at center, #204320 0%, #163616 55%, #102a10 100%)',
+          border: '1px solid #335833',
+          overflow: 'hidden',
+        }}
+      >
+        {activePlayers.map((p, i) => {
+          const angle = (Math.PI * 2 * i) / Math.max(activePlayers.length, 1) - Math.PI / 2;
+          const radius = 155;
+          const cx = 50 + (Math.cos(angle) * radius * 100) / 540;
+          const cy = 50 + (Math.sin(angle) * radius * 100) / 210;
+          const isMe = p.playerId === playerId;
+          const isTurn = p.playerId === publicState.currentTurnPlayerId;
+          const isLead = p.playerId === leadPlayerId;
+          const played = publicState.currentTrickPlays.some((play) => play.playerId === p.playerId);
+          return (
+            <div
+              key={p.playerId}
+              style={{
+                position: 'absolute',
+                left: `${cx}%`,
+                top: `${cy}%`,
+                transform: 'translate(-50%, -50%)',
+                minWidth: 110,
+                textAlign: 'center',
+                padding: '0.45rem 0.6rem',
+                borderRadius: 12,
+                background: isMe ? 'rgba(90, 140, 90, 0.35)' : 'rgba(20, 35, 20, 0.75)',
+                border: isTurn ? '1px solid #9f9' : '1px solid #385838',
+                boxShadow: isTurn ? '0 0 12px rgba(130,220,130,0.45)' : undefined,
+              }}
+            >
+              <div style={{ fontSize: '0.92rem', fontWeight: 600 }}>
+                {p.nickname}
+                {isMe ? ' (나)' : ''}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 5, marginTop: 2, marginBottom: 3 }}>
+                {isLead && (
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      padding: '1px 5px',
+                      borderRadius: 999,
+                      background: 'rgba(95, 167, 95, 0.3)',
+                      border: '1px solid #7fc27f',
+                      color: '#bef0be',
+                    }}
+                  >
+                    선
+                  </span>
+                )}
+                {isTurn && (
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      padding: '1px 5px',
+                      borderRadius: 999,
+                      background: 'rgba(120, 130, 210, 0.25)',
+                      border: '1px solid #8ea2ff',
+                      color: '#d0dcff',
+                    }}
+                  >
+                    턴
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: played ? '#9fcf9f' : '#8aa' }}>
+                {played ? '카드 냄' : isTurn ? '턴 진행중' : '대기중'}
+              </div>
+            </div>
+          );
+        })}
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 'min(400px, 78%)',
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <TrickArea plays={publicState.currentTrickPlays} players={publicState.players} compact />
+        </div>
+      </div>
       <ScoreBoard
         players={publicState.players}
         totalScores={publicState.totalScores}
@@ -298,20 +465,106 @@ function RoundResultModal({
   );
 }
 
-function BetInput({ max, label, onSubmit }: { max: number; label?: string; onSubmit: (v: number) => void }) {
+function BetInput({
+  max,
+  min = 0,
+  label,
+  onSubmit,
+}: {
+  max: number;
+  min?: number;
+  label?: string;
+  onSubmit: (v: number) => void;
+}) {
   const [val, setVal] = useState(0);
+  useEffect(() => {
+    setVal((prev) => Math.max(min, Math.min(max, prev)));
+  }, [min, max]);
+
   return (
-    <div style={{ marginBottom: '1rem', padding: '1rem', background: '#1a2a1a', borderRadius: 8 }}>
-      <label style={{ display: 'block', marginBottom: '0.5rem' }}>{label ?? `Bet (0–${max})`}</label>
-      <input
-        type="number"
-        min={0}
-        max={max}
-        value={val}
-        onChange={(e) => setVal(Math.max(0, Math.min(max, parseInt(e.target.value) || 0)))}
-        style={{ width: 80, marginLeft: '0.5rem' }}
-      />
-      <button onClick={() => onSubmit(val)} style={{ marginLeft: '0.5rem', padding: '0.25rem 0.75rem' }}>Confirm</button>
+    <div
+      style={{
+        marginBottom: '1rem',
+        padding: '1rem',
+        background: 'linear-gradient(180deg, #1a2a1a 0%, #172317 100%)',
+        borderRadius: 12,
+        border: '1px solid #3d5d3d',
+      }}
+    >
+      <div style={{ marginBottom: '0.6rem', fontWeight: 700, fontSize: '0.95rem' }}>
+        {label ?? `Bet (${min}–${max})`}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: '0.7rem' }}>
+        <button
+          type="button"
+          onClick={() => setVal((v) => Math.max(min, v - 1))}
+          style={{ minWidth: 40, fontSize: '1.05rem', fontWeight: 700 }}
+        >
+          -
+        </button>
+        <div
+          style={{
+            minWidth: 64,
+            textAlign: 'center',
+            fontSize: '1.2rem',
+            fontWeight: 800,
+            letterSpacing: '0.02em',
+            padding: '0.35rem 0.5rem',
+            borderRadius: 8,
+            background: '#102010',
+            border: '1px solid #3f6a3f',
+          }}
+        >
+          {val}
+        </div>
+        <button
+          type="button"
+          onClick={() => setVal((v) => Math.min(max, v + 1))}
+          style={{ minWidth: 40, fontSize: '1.05rem', fontWeight: 700 }}
+        >
+          +
+        </button>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={val}
+          onChange={(e) => setVal(Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
+          style={{ flex: 1 }}
+        />
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: '0.75rem' }}>
+        {Array.from({ length: max - min + 1 }, (_, idx) => min + idx).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => setVal(n)}
+            style={{
+              padding: '0.25rem 0.55rem',
+              fontSize: '0.86rem',
+              borderRadius: 999,
+              background: val === n ? '#4c7b4c' : '#274027',
+              border: val === n ? '1px solid #9fd39f' : '1px solid #3f5f3f',
+            }}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onSubmit(val)}
+        style={{
+          width: '100%',
+          padding: '0.55rem 0.8rem',
+          fontWeight: 700,
+          fontSize: '0.95rem',
+          borderRadius: 10,
+          background: 'linear-gradient(180deg, #4a7a4a 0%, #3d643d 100%)',
+        }}
+      >
+        이 값으로 베팅
+      </button>
     </div>
   );
 }

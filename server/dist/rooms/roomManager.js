@@ -2,6 +2,7 @@ import { applyAction, advanceToNextRound, createInitialState, } from '../game/st
 import { makePublicState, getPrivateView } from '../game/view.js';
 const DISCONNECT_GRACE_MS = 60_000;
 const rooms = new Map();
+const ROUND_TRANSITION_DELAY_MS = 2400;
 function generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -42,6 +43,7 @@ export function createRoom(nickname, playerId, socketId) {
         playerToSocket: new Map([[playerId, socketId]]),
         socketToPlayer: new Map([[socketId, playerId]]),
         disconnectTimers: new Map(),
+        roundAdvanceTimer: null,
         lock: Promise.resolve(),
         lockResolve: null,
     };
@@ -132,13 +134,30 @@ export async function dispatchAction(roomCode, action, actorId, io) {
             for (const [, socketId] of room.playerToSocket) {
                 io.to(socketId).emit('game:roundResult', { roundSummary: room.state.roundScores });
             }
-            room.state = advanceToNextRound(room.state);
-            for (const [, socketId] of room.playerToSocket) {
-                io.to(socketId).emit('game:phaseChange', {
-                    phase: room.state.phase,
-                    roundNumber: room.state.roundNumber,
+            if (room.roundAdvanceTimer)
+                clearTimeout(room.roundAdvanceTimer);
+            const expectedVersion = room.state.stateVersion;
+            room.roundAdvanceTimer = setTimeout(async () => {
+                await withRoomLock(roomCode, async (lockedRoom) => {
+                    if (lockedRoom.state.phase !== 'roundEnd')
+                        return;
+                    if (lockedRoom.state.stateVersion !== expectedVersion)
+                        return;
+                    lockedRoom.state = advanceToNextRound(lockedRoom.state);
+                    for (const [, socketId] of lockedRoom.playerToSocket) {
+                        io.to(socketId).emit('game:phaseChange', {
+                            phase: lockedRoom.state.phase,
+                            roundNumber: lockedRoom.state.roundNumber,
+                        });
+                    }
+                    if (lockedRoom.state.phase === 'gameOver') {
+                        for (const [, socketId] of lockedRoom.playerToSocket) {
+                            io.to(socketId).emit('game:gameOver', { finalScores: lockedRoom.state.totalScores });
+                        }
+                    }
+                    broadcastRoomUpdate(roomCode, lockedRoom.state, io);
                 });
-            }
+            }, ROUND_TRANSITION_DELAY_MS);
         }
         if (room.state.phase === 'gameOver') {
             for (const [, socketId] of room.playerToSocket) {

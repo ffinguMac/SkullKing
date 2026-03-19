@@ -27,6 +27,19 @@ export interface Play {
   playOrder: number;
 }
 
+export interface TrickResultPublic {
+  winnerId: string | null;
+  isVoid: boolean;
+  wouldHaveWonId?: string;
+  whalePlayerId?: string;
+}
+
+export interface TrickPublic {
+  plays: Play[];
+  leadSuit: Suit | null;
+  result: TrickResultPublic;
+}
+
 export type GamePhase =
   | 'lobby'
   | 'betting'
@@ -52,7 +65,7 @@ export interface PublicState {
   bets: Record<string, number>;
   currentTrickPlays: Play[];
   leadContext: { leadSuit: Suit | null; awaitingFirstColor: boolean };
-  tricks: unknown[];
+  tricks: TrickPublic[];
   wonCounts: Record<string, number>;
   roundScores: { playerId: string; baseScore: number; bonus: number; total: number }[];
   totalScores: Record<string, number>;

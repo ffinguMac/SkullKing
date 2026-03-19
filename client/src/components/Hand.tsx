@@ -11,9 +11,9 @@ interface HandProps {
 
 export default function Hand({ hand, canPlayHints, onPlayCard, isMyTurn, phase }: HandProps) {
   return (
-    <div style={{ marginTop: '2rem' }}>
-      <h3 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>My Hand</h3>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+    <div style={{ marginTop: '1.5rem' }}>
+      <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem' }}>My Hand</h3>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
         {hand.map((card, i) => {
           const canPlay = canPlayHints[i] ?? false;
           const disabled = phase !== 'playing' || !isMyTurn || !canPlay;
@@ -28,14 +28,21 @@ export default function Hand({ hand, canPlayHints, onPlayCard, isMyTurn, phase }
               style={{
                 padding: 0,
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: 12,
                 overflow: 'hidden',
                 opacity: disabled ? 0.6 : 1,
                 cursor: disabled ? 'not-allowed' : 'pointer',
-                transform: disabled ? 'none' : 'scale(1)',
+                transform: disabled ? 'none' : 'translateY(0)',
+                transition: 'transform 120ms ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!disabled) e.currentTarget.style.transform = 'translateY(-6px)';
+              }}
+              onMouseLeave={(e) => {
+                if (!disabled) e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
-              <CardDisplay card={card} />
+              <CardDisplay card={card} size="large" />
             </button>
           );
         })}
