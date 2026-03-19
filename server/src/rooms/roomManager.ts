@@ -7,6 +7,7 @@ import {
 } from '../game/stateMachine.js';
 import { makePublicState, getPrivateView } from '../game/view.js';
 import type { Server } from 'socket.io';
+import { persistGameOver, persistGameStart, persistRoundEnd } from '../persistence/supabaseGameStore.js';
 
 const DISCONNECT_GRACE_MS = 60_000;
 
@@ -17,6 +18,10 @@ export interface Room {
   socketToPlayer: Map<string, string>;
   disconnectTimers: Map<string, NodeJS.Timeout>;
   roundAdvanceTimer: NodeJS.Timeout | null;
+  dbGameId: number | null;
+  dbPlayerIds: Map<string, number>;
+  persistedRoundNumbers: Set<number>;
+  gameOverPersisted: boolean;
   lock: Promise<void>;
   lockResolve: (() => void) | null;
 }
@@ -65,6 +70,10 @@ export function createRoom(nickname: string, playerId: string, socketId: string)
     socketToPlayer: new Map([[socketId, playerId]]),
     disconnectTimers: new Map(),
     roundAdvanceTimer: null,
+    dbGameId: null,
+    dbPlayerIds: new Map(),
+    persistedRoundNumbers: new Set(),
+    gameOverPersisted: false,
     lock: Promise.resolve(),
     lockResolve: null,
   };
@@ -160,11 +169,38 @@ export async function dispatchAction(
   io: Server
 ): Promise<{ success: boolean; error?: string }> {
   const result = await withRoomLock(roomCode, async (room) => {
+    const prevPhase = room.state.phase;
     const r = applyAction(room.state, action, actorId);
     if (!r.success) return { success: false, error: r.error };
     room.state = r.state!;
 
+    if (action.type === 'game:start' && prevPhase === 'lobby' && room.state.phase === 'betting') {
+      try {
+        const persisted = await persistGameStart(roomCode, room.state);
+        if (persisted) {
+          room.dbGameId = persisted.gameId;
+          room.dbPlayerIds = persisted.playerDbIds;
+          room.persistedRoundNumbers.clear();
+          room.gameOverPersisted = false;
+        }
+      } catch (e) {
+        console.error('[Supabase] persistGameStart failed:', e);
+      }
+    }
+
     if (room.state.phase === 'roundEnd') {
+      if (room.dbGameId && !room.persistedRoundNumbers.has(room.state.roundNumber)) {
+        try {
+          await persistRoundEnd({
+            gameId: room.dbGameId,
+            playerDbIds: room.dbPlayerIds,
+            state: room.state,
+          });
+          room.persistedRoundNumbers.add(room.state.roundNumber);
+        } catch (e) {
+          console.error('[Supabase] persistRoundEnd failed:', e);
+        }
+      }
       for (const [, socketId] of room.playerToSocket) {
         io.to(socketId).emit('game:roundResult', { roundSummary: room.state.roundScores });
       }
@@ -182,6 +218,18 @@ export async function dispatchAction(
             });
           }
           if (lockedRoom.state.phase === 'gameOver') {
+            if (lockedRoom.dbGameId && !lockedRoom.gameOverPersisted) {
+              try {
+                await persistGameOver({
+                  gameId: lockedRoom.dbGameId,
+                  playerDbIds: lockedRoom.dbPlayerIds,
+                  state: lockedRoom.state,
+                });
+                lockedRoom.gameOverPersisted = true;
+              } catch (e) {
+                console.error('[Supabase] persistGameOver failed:', e);
+              }
+            }
             for (const [, socketId] of lockedRoom.playerToSocket) {
               io.to(socketId).emit('game:gameOver', { finalScores: lockedRoom.state.totalScores });
             }
@@ -191,6 +239,18 @@ export async function dispatchAction(
       }, ROUND_TRANSITION_DELAY_MS);
     }
     if (room.state.phase === 'gameOver') {
+      if (room.dbGameId && !room.gameOverPersisted) {
+        try {
+          await persistGameOver({
+            gameId: room.dbGameId,
+            playerDbIds: room.dbPlayerIds,
+            state: room.state,
+          });
+          room.gameOverPersisted = true;
+        } catch (e) {
+          console.error('[Supabase] persistGameOver failed:', e);
+        }
+      }
       for (const [, socketId] of room.playerToSocket) {
         io.to(socketId).emit('game:gameOver', { finalScores: room.state.totalScores });
       }
