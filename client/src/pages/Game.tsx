@@ -49,7 +49,15 @@ export default function Game() {
 
   const isMyTurn = publicState.currentTurnPlayerId === session.playerId;
   const playerId = session.playerId;
-  const activePlayers = publicState.players.filter((p) => !p.isSpectator).slice(0, 6);
+  const activePlayersRaw = publicState.players.filter((p) => !p.isSpectator).slice(0, 6);
+  const mySeatIndex = activePlayersRaw.findIndex((p) => p.playerId === playerId);
+  const activePlayers =
+    mySeatIndex >= 0
+      ? [
+          ...activePlayersRaw.slice(mySeatIndex),
+          ...activePlayersRaw.slice(0, mySeatIndex),
+        ]
+      : activePlayersRaw;
   const leadPlayerId = publicState.turnOrder[0] ?? null;
   const leadPlayerName = leadPlayerId
     ? publicState.players.find((p) => p.playerId === leadPlayerId)?.nickname ?? leadPlayerId.slice(0, 8)
@@ -196,7 +204,8 @@ export default function Game() {
         }}
       >
         {activePlayers.map((p, i) => {
-          const angle = (Math.PI * 2 * i) / Math.max(activePlayers.length, 1) - Math.PI / 2;
+          // 내 자리를 항상 하단(남쪽)에 고정하고 나머지는 시계 방향으로 배치
+          const angle = (Math.PI * 2 * i) / Math.max(activePlayers.length, 1) + Math.PI / 2;
           const radius = 155;
           const cx = 50 + (Math.cos(angle) * radius * 100) / 540;
           const cy = 50 + (Math.sin(angle) * radius * 100) / 210;
@@ -480,6 +489,12 @@ function BetInput({
   useEffect(() => {
     setVal((prev) => Math.max(min, Math.min(max, prev)));
   }, [min, max]);
+  const clamp = (v: number) => Math.max(min, Math.min(max, v));
+  const submitValue = (next: number) => {
+    const clamped = clamp(next);
+    setVal(clamped);
+    onSubmit(clamped);
+  };
 
   return (
     <div
@@ -497,7 +512,7 @@ function BetInput({
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: '0.7rem' }}>
         <button
           type="button"
-          onClick={() => setVal((v) => Math.max(min, v - 1))}
+          onClick={() => submitValue(val - 1)}
           style={{ minWidth: 40, fontSize: '1.05rem', fontWeight: 700 }}
         >
           -
@@ -519,26 +534,18 @@ function BetInput({
         </div>
         <button
           type="button"
-          onClick={() => setVal((v) => Math.min(max, v + 1))}
+          onClick={() => submitValue(val + 1)}
           style={{ minWidth: 40, fontSize: '1.05rem', fontWeight: 700 }}
         >
           +
         </button>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          value={val}
-          onChange={(e) => setVal(Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
-          style={{ flex: 1 }}
-        />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: '0.75rem' }}>
         {Array.from({ length: max - min + 1 }, (_, idx) => min + idx).map((n) => (
           <button
             key={n}
             type="button"
-            onClick={() => setVal(n)}
+            onClick={() => submitValue(n)}
             style={{
               padding: '0.25rem 0.55rem',
               fontSize: '0.86rem',
@@ -551,20 +558,6 @@ function BetInput({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={() => onSubmit(val)}
-        style={{
-          width: '100%',
-          padding: '0.55rem 0.8rem',
-          fontWeight: 700,
-          fontSize: '0.95rem',
-          borderRadius: 10,
-          background: 'linear-gradient(180deg, #4a7a4a 0%, #3d643d 100%)',
-        }}
-      >
-        이 값으로 베팅
-      </button>
     </div>
   );
 }
