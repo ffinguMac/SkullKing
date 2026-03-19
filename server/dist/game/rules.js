@@ -4,17 +4,11 @@ export function normalizeCard(card) {
 export function isSuitCard(card) {
     return card.type === 'color';
 }
-/** 탈출/약탈품/티그리스(탈출선언) */
+/** 탈출 카드 (Escape) */
 export function isEscapeLike(card) {
-    if (card.type === 'special') {
-        if (card.special === 'escape' || card.special === 'loot')
-            return true;
-        if (card.special === 'tigress' && card.tigressDecl === 'escape')
-            return true;
-    }
-    return false;
+    return card.type === 'special' && card.special === 'escape';
 }
-/** 해적/인어/스컬킹/티그리스(해적선언)/크라켄/흰고래 */
+/** 해적/인어/스컬킹/크라켄/흰고래 */
 export function isCharacterCard(card) {
     if (card.type === 'special') {
         if (card.special === 'pirate')
@@ -22,8 +16,6 @@ export function isCharacterCard(card) {
         if (card.special === 'mermaid')
             return true;
         if (card.special === 'skullking')
-            return true;
-        if (card.special === 'tigress' && card.tigressDecl === 'pirate')
             return true;
         if (card.special === 'kraken')
             return true;

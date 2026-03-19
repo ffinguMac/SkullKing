@@ -14,9 +14,6 @@ export function buildDeck() {
     for (let i = 0; i < 2; i++)
         deck.push({ type: 'special', special: 'mermaid' });
     deck.push({ type: 'special', special: 'skullking' });
-    deck.push({ type: 'special', special: 'tigress' });
-    for (let i = 0; i < 2; i++)
-        deck.push({ type: 'special', special: 'loot' });
     deck.push({ type: 'special', special: 'kraken' });
     deck.push({ type: 'special', special: 'whale' });
     return deck;

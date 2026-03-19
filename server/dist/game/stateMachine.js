@@ -165,13 +165,7 @@ function applyPlayCard(state, action, actorId) {
     if (!hand || action.cardIndex < 0 || action.cardIndex >= hand.length) {
         return { success: false, error: 'INVALID_CARD' };
     }
-    let card = hand[action.cardIndex];
-    if (card.type === 'special' && card.special === 'tigress') {
-        if (!action.tigressChoice || !['pirate', 'escape'].includes(action.tigressChoice)) {
-            return { success: false, error: 'TIGRESS_REQUIRES_CHOICE' };
-        }
-        card = { ...card, tigressDecl: action.tigressChoice };
-    }
+    const card = hand[action.cardIndex];
     if (!canPlayCard(card, hand, state.leadContext.leadSuit)) {
         return { success: false, error: 'MUST_FOLLOW_SUIT' };
     }

@@ -21,7 +21,6 @@ export function scoreRound(round, bets, wonCounts, tricks) {
         successMap.set(b.playerId, b.bet === won);
     }
     const bonuses = calculateBonuses(round, bets, wonCounts, trickCardsByWinner, tricks, successMap);
-    applyLootAllianceBonuses(bonuses, tricks, successMap);
     return bets.map((b) => {
         const won = wonCounts[b.playerId] ?? 0;
         const success = successMap.get(b.playerId);
@@ -62,7 +61,7 @@ export function calculateBonuses(_round, _bets, _wonCounts, trickCardsByWinner, 
             continue;
         const plays = t.plays;
         const hasMermaid = plays.some((p) => p.card.type === 'special' && p.card.special === 'mermaid');
-        const hasPirate = plays.some((p) => p.card.type === 'special' && (p.card.special === 'pirate' || (p.card.special === 'tigress' && p.card.tigressDecl === 'pirate')));
+        const hasPirate = plays.some((p) => p.card.type === 'special' && p.card.special === 'pirate');
         const hasSkullKing = plays.some((p) => p.card.type === 'special' && p.card.special === 'skullking');
         const winnerCard = plays.find((p) => p.playerId === winnerId)?.card;
         if (!winnerCard)
@@ -72,7 +71,7 @@ export function calculateBonuses(_round, _bets, _wonCounts, trickCardsByWinner, 
             bonuses.set(winnerId, (bonuses.get(winnerId) ?? 0) + mermaidCount * 20);
         }
         if (winnerCard.type === 'special' && winnerCard.special === 'skullking' && hasPirate) {
-            const pirateCount = plays.filter((p) => p.card.type === 'special' && (p.card.special === 'pirate' || (p.card.special === 'tigress' && p.card.tigressDecl === 'pirate'))).length;
+            const pirateCount = plays.filter((p) => p.card.type === 'special' && p.card.special === 'pirate').length;
             bonuses.set(winnerId, (bonuses.get(winnerId) ?? 0) + pirateCount * 30);
         }
         if (winnerCard.type === 'special' && winnerCard.special === 'mermaid' && hasSkullKing) {
@@ -80,23 +79,4 @@ export function calculateBonuses(_round, _bets, _wonCounts, trickCardsByWinner, 
         }
     }
     return bonuses;
-}
-/** 14 보너스는 카드 수집 기준, 해적/인어/스컬킹 보너스는 트릭별 승자+플레이 기준 */
-export function applyLootAllianceBonuses(bonuses, tricks, successMap) {
-    for (const t of tricks) {
-        const lootPlayers = t.plays
-            .filter((p) => p.card.type === 'special' && p.card.special === 'loot')
-            .map((p) => p.playerId);
-        const winnerId = t.result.winnerId ?? t.result.wouldHaveWonId;
-        if (!winnerId || lootPlayers.length === 0)
-            continue;
-        if (!successMap.get(winnerId))
-            continue;
-        for (const lp of lootPlayers) {
-            if (!successMap.get(lp))
-                continue;
-            bonuses.set(lp, (bonuses.get(lp) ?? 0) + 20);
-            bonuses.set(winnerId, (bonuses.get(winnerId) ?? 0) + 20);
-        }
-    }
 }

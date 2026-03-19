@@ -67,7 +67,7 @@ export function judgeTrickWithoutKrakenWhale(plays, leadSuit) {
         return null;
     const mermaids = filtered.filter((p) => p.card.type === 'special' && p.card.special === 'mermaid');
     const skullKings = filtered.filter((p) => p.card.type === 'special' && p.card.special === 'skullking');
-    const pirates = filtered.filter((p) => p.card.type === 'special' && (p.card.special === 'pirate' || (p.card.special === 'tigress' && p.card.tigressDecl === 'pirate')));
+    const pirates = filtered.filter((p) => p.card.type === 'special' && p.card.special === 'pirate');
     const escapes = filtered.filter((p) => isEscapeLike(p.card));
     const colorPlays = filtered.filter((p) => isSuitCard(p.card));
     if (mermaids.length > 0 && skullKings.length > 0) {

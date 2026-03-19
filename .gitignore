@@ -1,0 +1,6 @@
+# Ignore test source files and test directories
+**/__tests__/
+**/*.test.ts
+**/*.spec.ts
+**/*.test.js
+**/*.spec.js

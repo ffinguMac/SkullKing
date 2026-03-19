@@ -89,7 +89,6 @@ export function setupSocketHandlers(io) {
                 roomCode,
                 playerId: pid,
                 cardIndex: data.cardId,
-                tigressChoice: data.tigressChoice,
             }, pid, io);
             if (!result.success)
                 emitError(result.error ?? 'PLAY_FAILED', result.error ?? '');

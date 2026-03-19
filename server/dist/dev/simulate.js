@@ -60,14 +60,11 @@ function runSimulation() {
                 }
                 if (cardIndex < 0)
                     throw new Error(`No legal card for ${pid}`);
-                const card = hand[cardIndex];
-                const tigressChoice = card.type === 'special' && card.special === 'tigress' ? 'escape' : undefined;
                 const r = applyAction(state, {
                     type: 'game:playCard',
                     roomCode: 'X',
                     playerId: pid,
                     cardIndex,
-                    tigressChoice,
                 }, pid);
                 if (!r.state)
                     throw new Error(`Play failed: ${r.error}`);
