@@ -10,6 +10,7 @@ function getSupabaseClient(): SupabaseClient | null {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {
+    console.warn('[Supabase] missing env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
     cachedClient = null;
     return cachedClient;
   }
@@ -27,10 +28,14 @@ export interface PersistedGameContext {
 
 export async function persistGameStart(roomCode: string, state: GameState): Promise<PersistedGameContext | null> {
   const client = getSupabaseClient();
-  if (!client) return null;
+  if (!client) {
+    console.warn('[Supabase] persistGameStart skipped: client not configured');
+    return null;
+  }
 
   const activePlayers = state.players.filter((p) => state.activePlayerIds.includes(p.playerId));
   const playerDbIds = new Map<string, number>();
+  console.log(`[Supabase] persistGameStart roomCode=${roomCode} players=${activePlayers.length}`);
 
   for (const p of activePlayers) {
     const { data, error } = await client
@@ -85,7 +90,7 @@ export async function persistRoundEnd(args: {
   state: GameState;
 }): Promise<void> {
   const client = getSupabaseClient();
-  if (!client) return;
+  if (!client) return console.warn('[Supabase] persistRoundEnd skipped: client not configured');
 
   const { gameId, playerDbIds, state } = args;
   const leadPlayerDbId = playerDbIds.get(state.turnOrder[0] ?? '');
@@ -153,7 +158,7 @@ export async function persistGameOver(args: {
   state: GameState;
 }): Promise<void> {
   const client = getSupabaseClient();
-  if (!client) return;
+  if (!client) return console.warn('[Supabase] persistGameOver skipped: client not configured');
 
   const { gameId, playerDbIds, state } = args;
 

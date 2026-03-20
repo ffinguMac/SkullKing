@@ -70,6 +70,8 @@ export interface PublicState {
   roundScores: { playerId: string; baseScore: number; bonus: number; total: number }[];
   totalScores: Record<string, number>;
   currentTurnPlayerId: string | null;
+  /** 현재 트릭의 선 플레이어(첫 카드를 낸 플레이어). 트릭 동안 고정 */
+  currentTrickLeadPlayerId: string | null;
   turnOrder: string[];
   turnIndex: number;
   stateVersion: number;

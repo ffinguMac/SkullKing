@@ -13,7 +13,7 @@ export default function Hand({ hand, canPlayHints, onPlayCard, isMyTurn, phase }
   return (
     <div style={{ marginTop: '1.5rem' }}>
       <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem' }}>My Hand</h3>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
         {hand.map((card, i) => {
           const canPlay = canPlayHints[i] ?? false;
           const disabled = phase !== 'playing' || !isMyTurn || !canPlay;

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { Server } from 'socket.io';
 import { setupSocketHandlers } from './socket.js';

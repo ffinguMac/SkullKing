@@ -18,7 +18,7 @@ export default function CardDisplay({ card, size = 'normal', style: extraStyle }
     size === 'small'
       ? { width: 60, height: 85 }
       : size === 'large'
-        ? { width: 92, height: 132 }
+        ? { width: 112, height: 160 }
         : { width: 70, height: 100 };
 
   const baseStyle: React.CSSProperties = {

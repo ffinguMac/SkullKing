@@ -42,6 +42,8 @@ export interface GameState {
   roundScores: RoundScore[];
   totalScores: Record<string, number>;
   currentTurnPlayerId: string | null;
+  /** 현재 트릭의 선 플레이어(첫 카드를 낸 플레이어). 트릭 동안 고정. */
+  currentTrickLeadPlayerId: string | null;
   /** 베팅/플레이 순서 */
   turnOrder: string[];
   turnIndex: number;
@@ -84,6 +86,7 @@ function createInitialState(): GameState {
     roundScores: [],
     totalScores: {},
     currentTurnPlayerId: null,
+    currentTrickLeadPlayerId: null,
     turnOrder: [],
     turnIndex: 0,
     stateVersion: 0,
@@ -200,6 +203,7 @@ function applyStart(
   state.turnOrder = [...state.activePlayerIds];
   state.turnIndex = 0;
   state.currentTurnPlayerId = state.turnOrder[0];
+  state.currentTrickLeadPlayerId = state.turnOrder[0] ?? null;
   state.bets = {};
   state.wonCounts = Object.fromEntries(state.activePlayerIds.map((id) => [id, 0]));
   state.totalScores = Object.fromEntries(state.activePlayerIds.map((id) => [id, 0]));
@@ -227,14 +231,17 @@ function applyBet(
   if (value < 0 || value > state.tricksPerRound) {
     return { success: false, error: 'INVALID_BET' };
   }
+
+  // 동시 베팅: 누구나 같은 라운드에서 순서 없이 베팅 가능
+  // (phase 전환은 "모든 activePlayerIds의 베팅이 존재"할 때만)
   state.bets[actorId] = value;
-  state.turnIndex++;
-  if (state.turnIndex >= state.turnOrder.length) {
+
+  const allBetsPlaced = state.activePlayerIds.every((pid) => typeof state.bets[pid] === 'number');
+  if (allBetsPlaced) {
     state.phase = 'playing';
     state.turnIndex = 0;
-    state.currentTurnPlayerId = state.turnOrder[0];
-  } else {
-    state.currentTurnPlayerId = state.turnOrder[state.turnIndex];
+    state.currentTurnPlayerId = state.turnOrder[0] ?? null;
+    state.currentTrickLeadPlayerId = state.turnOrder[0] ?? null;
   }
   return { success: true, state };
 }
@@ -264,6 +271,11 @@ function applyPlayCard(
     card,
     playOrder: state.currentTrickPlays.length,
   };
+
+  // 첫 카드를 내는 순간: 이번 트릭의 선(고정값) 기록
+  if (state.currentTrickPlays.length === 0) {
+    state.currentTrickLeadPlayerId = actorId;
+  }
 
   state.hands[actorId] = hand.filter((_, i) => i !== action.cardIndex);
   state.currentTrickPlays.push(play);
@@ -347,6 +359,7 @@ export function advanceToNextRound(state: GameState): GameState {
   next.turnOrder = [...next.activePlayerIds];
   next.turnIndex = 0;
   next.currentTurnPlayerId = next.turnOrder[0];
+  next.currentTrickLeadPlayerId = next.turnOrder[0] ?? null;
 
   const deck = shuffle(buildDeck(), next.devSeed);
   const hands = deal(deck, next.activePlayerIds.length, next.tricksPerRound);
